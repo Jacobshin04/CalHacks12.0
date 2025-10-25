@@ -6,6 +6,11 @@ const authOptions = {
     GitHub({
       clientId: process.env.GITHUB_ID!,
       clientSecret: process.env.GITHUB_SECRET!,
+      authorization: {
+        params: {
+          prompt: "select_account", // Allow users to select different accounts
+        },
+      },
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,

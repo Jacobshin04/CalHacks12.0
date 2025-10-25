@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession, signOut, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -88,12 +88,31 @@ export default function Dashboard() {
                   {session.user?.name}
                 </span>
               </div>
-              <button
-                onClick={() => signOut()}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                Sign out
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() =>
+                    signIn("github", {
+                      callbackUrl: "/dashboard",
+                      prompt: "select_account",
+                    })
+                  }
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Switch Account
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  onClick={() =>
+                    signOut({
+                      callbackUrl: "/auth/signin",
+                      redirect: true,
+                    })
+                  }
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           </div>
         </div>
