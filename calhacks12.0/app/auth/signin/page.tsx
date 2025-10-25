@@ -132,7 +132,7 @@ export default function SignIn() {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
-              We'll analyze your repositories and provide AI-powered insights
+              We&apos;ll analyze your repositories and provide AI-powered insights
             </p>
           </div>
         </div>
