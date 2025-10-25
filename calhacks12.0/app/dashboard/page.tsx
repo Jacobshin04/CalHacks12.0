@@ -6,6 +6,14 @@ import { useEffect, useState } from "react";
 
 interface RepoScore {
   name: string;
+  fullName?: string;
+  description?: string;
+  private?: boolean;
+  url?: string;
+  language?: string;
+  stars?: number;
+  forks?: number;
+  updatedAt?: string;
   score: number;
   lastReview: string;
   issues: number;
@@ -23,28 +31,41 @@ export default function Dashboard() {
     if (status === "unauthenticated") {
       router.push("/auth/signin");
     } else if (status === "authenticated") {
-      // Simulate loading and fetching repo data
-      setTimeout(() => {
-        setRepoScores([
-          {
-            name: "my-awesome-project",
-            score: 87,
-            lastReview: "2 hours ago",
-            issues: 2,
-            security: 0,
-            performance: 95,
-          },
-          {
-            name: "react-dashboard",
-            score: 92,
-            lastReview: "1 day ago",
-            issues: 1,
-            security: 0,
-            performance: 88,
-          },
-        ]);
-        setIsLoading(false);
-      }, 2000);
+      // Fetch actual GitHub repositories
+      fetch("/api/github/repos")
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error("Failed to fetch repositories");
+          }
+          return res.json();
+        })
+        .then((data) => {
+          setRepoScores(data.repos || []);
+          setIsLoading(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching repositories:", error);
+          setIsLoading(false);
+          // Fallback to mock data on error
+          setRepoScores([
+            {
+              name: "my-awesome-project",
+              score: 87,
+              lastReview: "2 hours ago",
+              issues: 2,
+              security: 0,
+              performance: 95,
+            },
+            {
+              name: "react-dashboard",
+              score: 92,
+              lastReview: "1 day ago",
+              issues: 1,
+              security: 0,
+              performance: 88,
+            },
+          ]);
+        });
     }
   }, [status, router]);
 
@@ -138,11 +159,18 @@ export default function Dashboard() {
                 className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
               >
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {repo.name}
-                  </h3>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 truncate">
+                      {repo.name}
+                    </h3>
+                    {repo.description && (
+                      <p className="text-sm text-gray-500 truncate mt-1">
+                        {repo.description}
+                      </p>
+                    )}
+                  </div>
                   <div
-                    className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    className={`px-3 py-1 rounded-full text-sm font-medium ml-2 ${
                       repo.score >= 90
                         ? "bg-green-100 text-green-800"
                         : repo.score >= 70
@@ -152,6 +180,22 @@ export default function Dashboard() {
                   >
                     {repo.score}/100
                   </div>
+                </div>
+
+                <div className="flex items-center gap-4 mb-3 text-sm text-gray-600">
+                  {repo.language && (
+                    <span className="flex items-center">
+                      <span className="w-2 h-2 bg-blue-500 rounded-full mr-1"></span>
+                      {repo.language}
+                    </span>
+                  )}
+                  {repo.stars !== undefined && <span>⭐ {repo.stars}</span>}
+                  {repo.forks !== undefined && <span>🍴 {repo.forks}</span>}
+                  {repo.private && (
+                    <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">
+                      Private
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -182,9 +226,14 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <button className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">
-                  View Details
-                </button>
+                <a
+                  href={repo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-center"
+                >
+                  View on GitHub
+                </a>
               </div>
             ))}
           </div>
