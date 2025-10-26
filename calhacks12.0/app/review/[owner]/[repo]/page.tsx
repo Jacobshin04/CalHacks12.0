@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import ApiTestResults from "@/components/ApiTestResults";
 
 interface PullRequest {
   id: number;
@@ -32,6 +33,11 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPR, setSelectedPR] = useState<PullRequest | null>(null);
+
+  // API Testing state
+  const [showApiTests, setShowApiTests] = useState(false);
+  const [apiTestsLoading, setApiTestsLoading] = useState(false);
+  const [apiTestsResults, setApiTestsResults] = useState<any>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -109,6 +115,83 @@ export default function ReviewPage() {
     }
   };
 
+  const handleTestApiEndpoints = async () => {
+    try {
+      setApiTestsLoading(true);
+      setShowApiTests(true);
+
+      // Step 1: Discover endpoints
+      const endpointsRes = await fetch("/api/analyze/endpoints", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, repo }),
+      });
+
+      if (!endpointsRes.ok) {
+        throw new Error("Failed to discover endpoints");
+      }
+
+      let endpointsData = await endpointsRes.json();
+
+      // Map endpoints to correct paths for the test server
+      if (endpointsData.endpoints && endpointsData.endpoints.length > 0) {
+        const mapRes = await fetch("/api/test/map-endpoints", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoints: endpointsData.endpoints }),
+        });
+
+        if (mapRes.ok) {
+          const mappedData = await mapRes.json();
+          endpointsData = { ...endpointsData, endpoints: mappedData.endpoints };
+        }
+      }
+
+      // Check if any endpoints were found
+      if (!endpointsData.endpoints || endpointsData.endpoints.length === 0) {
+        setApiTestsResults({
+          tests: [],
+          summary: {
+            total: 0,
+            passed: 0,
+            failed: 0,
+            avgResponseTime: 0,
+          },
+          message: "No API endpoints found in this repository.",
+        });
+        return;
+      }
+
+      // Step 2: Setup server (mock mode - no Docker needed)
+      const serverRes = await fetch("/api/runner/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, repo, useDocker: false }),
+      });
+
+      const serverData = await serverRes.json();
+
+      // Step 3: Execute tests (using mock data, no real server needed)
+      const testsRes = await fetch("/api/test/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoints: endpointsData.endpoints,
+          baseUrl: serverData.server?.url || "http://localhost",
+          serverPort: serverData.server?.port || 3001,
+        }),
+      });
+
+      const testsData = await testsRes.json();
+      setApiTestsResults(testsData);
+    } catch (error) {
+      console.error("Error testing API endpoints:", error);
+      setError("Failed to test API endpoints");
+    } finally {
+      setApiTestsLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen p-8">
@@ -134,10 +217,39 @@ export default function ReviewPage() {
 
   return (
     <div className="min-h-screen p-8">
-      <h1 className="text-2xl font-bold mb-2">
-        Review: {owner}/{repo}
-      </h1>
-      <p className="text-gray-600 mb-6">Pull Request History and Comments</p>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-bold">
+            Review: {owner}/{repo}
+          </h1>
+          <p className="text-gray-600 mt-1">
+            Pull Request History and Comments
+          </p>
+        </div>
+        <button
+          onClick={handleTestApiEndpoints}
+          disabled={apiTestsLoading}
+          className="bg-gradient-to-r from-purple-500 to-blue-600 text-white px-6 py-3 rounded-lg hover:from-purple-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+        >
+          {apiTestsLoading ? "Testing..." : "🧪 Test API Endpoints"}
+        </button>
+      </div>
+
+      {/* API Test Results */}
+      {showApiTests && apiTestsResults && (
+        <div className="mb-6">
+          <ApiTestResults
+            tests={apiTestsResults.tests}
+            summary={apiTestsResults.summary}
+            isLoading={apiTestsLoading}
+            message={apiTestsResults.message}
+            requiresServer={apiTestsResults.requiresServer}
+            serverCommand={apiTestsResults.serverCommand}
+          />
+        </div>
+      )}
+
+      <div className="mb-6"></div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pull Requests List */}
