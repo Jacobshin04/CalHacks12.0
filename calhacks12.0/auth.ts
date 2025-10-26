@@ -1,11 +1,12 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
+import { env } from "./lib/env";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     GitHub({
-      clientId: process.env.GITHUB_ID!,
-      clientSecret: process.env.GITHUB_SECRET!,
+      clientId: env.GITHUB_ID!,
+      clientSecret: env.GITHUB_SECRET!,
       authorization: {
         params: {
           prompt: "select_account", // Allow users to select different accounts
@@ -14,7 +15,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
   pages: { signIn: "/auth/signin" },
   callbacks: {

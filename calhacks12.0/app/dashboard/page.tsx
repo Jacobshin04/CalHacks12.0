@@ -3,6 +3,7 @@
 import { useSession, signOut, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import FeedbackModal from "../components/FeedbackModal";
 
 interface RepoScore {
   name: string;
@@ -21,30 +22,62 @@ interface RepoScore {
   performance: number;
 }
 
+interface FeedbackData {
+  analysis: {
+    overallScore: number;
+    strengths: string[];
+    improvements: string[];
+    securityIssues: string[];
+    performanceIssues: string[];
+    codeQuality: string[];
+    recommendations: string[];
+  };
+  summary: string;
+}
+
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [repoScores, setRepoScores] = useState<RepoScore[]>([]);
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackData | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   useEffect(() => {
+    console.log('🎯 Dashboard useEffect triggered, status:', status);
+    
     if (status === "unauthenticated") {
+      console.log('❌ User not authenticated, redirecting to signin');
       router.push("/auth/signin");
     } else if (status === "authenticated") {
+      console.log('✅ User authenticated, fetching GitHub repositories...');
       // Fetch actual GitHub repositories
       fetch("/api/github/repos")
         .then((res) => {
+          console.log('📊 GitHub repos API response status:', res.status);
           if (!res.ok) {
             throw new Error("Failed to fetch repositories");
           }
           return res.json();
         })
         .then((data) => {
+          console.log('📋 GitHub repos data received:', {
+            repoCount: data.repos?.length || 0,
+            firstRepo: data.repos?.[0] ? {
+              name: data.repos[0].name,
+              fullName: data.repos[0].fullName,
+              language: data.repos[0].language
+            } : 'No repos'
+          });
           setRepoScores(data.repos || []);
           setIsLoading(false);
+          console.log('✅ Repositories loaded successfully');
         })
         .catch((error) => {
-          console.error("Error fetching repositories:", error);
+          console.error("❌ Error fetching repositories:", error);
+          console.log('🔄 Falling back to mock data...');
           setIsLoading(false);
           // Fallback to mock data on error
           setRepoScores([
@@ -65,9 +98,73 @@ export default function Dashboard() {
               performance: 88,
             },
           ]);
+          console.log('✅ Mock data loaded as fallback');
         });
     }
   }, [status, router]);
+
+  const analyzeRepository = async (repo: RepoScore) => {
+    console.log('🔍 === ANALYZE REPOSITORY CLICKED ===');
+    console.log('📊 Repository data:', {
+      name: repo.name,
+      fullName: repo.fullName,
+      url: repo.url,
+      language: repo.language,
+      description: repo.description,
+      hasFullName: !!repo.fullName
+    });
+    
+    setIsAnalyzing(true);
+    setSelectedRepo(repo.name);
+    setShowFeedbackModal(true);
+    setFeedback(null);
+
+    try {
+      console.log('🌐 Sending request to Claude AI feedback API...');
+      const requestData = {
+        repoName: repo.name,
+        repoUrl: repo.url,
+        language: repo.language,
+        description: repo.description,
+        fullName: repo.fullName, // This contains owner/repo format
+      };
+      console.log('📤 Request payload:', requestData);
+      
+      const response = await fetch("/api/claude/feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      console.log('📊 Claude AI API response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Claude AI API error:', response.status, errorText);
+        throw new Error("Failed to analyze repository");
+      }
+
+      console.log('✅ Claude AI API response successful, parsing data...');
+      const data = await response.json();
+      console.log('📋 Claude AI response received:', {
+        hasAnalysis: !!data.analysis,
+        overallScore: data.analysis?.overallScore,
+        strengthsCount: data.analysis?.strengths?.length,
+        summaryLength: data.summary?.length
+      });
+      
+      setFeedback(data);
+      console.log('✅ Analysis completed and feedback set');
+    } catch (error) {
+      console.error("❌ Error analyzing repository:", error);
+      // You could show an error message here
+    } finally {
+      setIsAnalyzing(false);
+      console.log('🏁 === ANALYZE REPOSITORY COMPLETED ===');
+    }
+  };
 
   if (status === "loading" || isLoading) {
     return (
@@ -226,14 +323,23 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <a
-                  href={repo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-center"
-                >
-                  View on GitHub
-                </a>
+                <div className="mt-4 space-y-2">
+                  <button
+                    onClick={() => analyzeRepository(repo)}
+                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-2 px-4 rounded-md hover:from-purple-700 hover:to-blue-700 transition-all duration-200 flex items-center justify-center space-x-2"
+                  >
+                    <span>🧠</span>
+                    <span>Analyze with AI</span>
+                  </button>
+                  <a
+                    href={repo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 transition-colors text-center"
+                  >
+                    View on GitHub
+                  </a>
+                </div>
               </div>
             ))}
           </div>
@@ -279,6 +385,19 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => {
+          setShowFeedbackModal(false);
+          setSelectedRepo(null);
+          setFeedback(null);
+        }}
+        repoName={selectedRepo || ""}
+        feedback={feedback}
+        isLoading={isAnalyzing}
+      />
     </div>
   );
 }
