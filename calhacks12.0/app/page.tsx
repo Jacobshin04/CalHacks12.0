@@ -1,31 +1,81 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { LandingPage } from "../components/LandingPage";
+import { GitLitLogo } from "../components/GitLitLogo";
 
 export default function Home() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(true);
 
   useEffect(() => {
     if (status === "loading") return; // Still loading
 
     if (session) {
       router.push("/dashboard");
-    } else {
-      router.push("/auth/signin");
     }
+
+    // Check if GitHub OAuth is configured
+    fetch("/api/auth/providers")
+      .then((res) => res.json())
+      .then((data) => {
+        setIsConfigured(Object.keys(data).length > 0);
+      })
+      .catch(() => {
+        setIsConfigured(false);
+      });
   }, [session, status, router]);
 
-  // Show loading while redirecting
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
-        <h2 className="text-2xl font-semibold text-white">🧠 GitLit</h2>
-        <p className="text-gray-300">Loading...</p>
+  const handleConnectGitHub = async () => {
+    setIsLoading(true);
+    try {
+      await signIn("github", {
+        callbackUrl: "/dashboard",
+      });
+    } catch (error) {
+      console.error("Sign in error:", error);
+      alert(
+        "GitHub OAuth is not configured. Please check your environment variables."
+      );
+      setIsLoading(false);
+    }
+  };
+
+  // Show loading while checking session
+  if (status === "loading") {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(248, 249, 251, 0.95) 0%, rgba(238, 242, 255, 0.95) 100%)",
+        }}
+      >
+        <div className="text-center">
+          <div className="mb-8">
+            <GitLitLogo className="w-96 h-28" animate={true} />
+          </div>
+          <p className="text-2xl text-gray-600 font-medium">Loading...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // Show landing page if not authenticated
+  if (!session) {
+    return (
+      <LandingPage
+        onConnectGitHub={handleConnectGitHub}
+        isLoading={isLoading}
+        isConfigured={isConfigured}
+      />
+    );
+  }
+
+  // This should not be reached due to useEffect redirect, but just in case
+  return null;
 }
