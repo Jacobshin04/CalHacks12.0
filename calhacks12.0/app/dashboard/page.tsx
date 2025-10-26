@@ -30,6 +30,16 @@ export default function Dashboard() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [repoScores, setRepoScores] = useState<RepoScore[]>([]);
+  const [rateOpen, setRateOpen] = useState(false);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
+  const [rateResult, setRateResult] = useState<string>("");
+  const [rateRepoLabel, setRateRepoLabel] = useState<string>("");
+  const [designOpen, setDesignOpen] = useState(false);
+  const [designLoading, setDesignLoading] = useState(false);
+  const [designError, setDesignError] = useState<string | null>(null);
+  const [designResult, setDesignResult] = useState<string>("");
+  const [designRepoLabel, setDesignRepoLabel] = useState<string>("");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -44,7 +54,23 @@ export default function Dashboard() {
           return res.json();
         })
         .then((data) => {
-          setRepoScores(data.repos || []);
+          // Overlay scores from localStorage if present
+          let repos = data.repos || [];
+          try {
+            if (typeof window !== "undefined") {
+              const raw = window.localStorage.getItem("repoScores");
+              const store = raw ? JSON.parse(raw) : {};
+              repos = repos.map((r: any) => {
+                const key = r.fullName ?? `unknown/${r.name}`;
+                const overlay = store[key];
+                if (overlay && typeof overlay.averageScore === "number") {
+                  return { ...r, score: overlay.averageScore };
+                }
+                return r;
+              });
+            }
+          } catch {}
+          setRepoScores(repos);
           setIsLoading(false);
         })
         .catch((error) => {
@@ -54,19 +80,19 @@ export default function Dashboard() {
           setRepoScores([
             {
               name: "my-awesome-project",
-              score: 87,
-              lastReview: "2 hours ago",
-              issues: 2,
+              score: 0,
+              lastReview: "Never",
+              issues: 0,
               security: 0,
-              performance: 95,
+              performance: 0,
             },
             {
               name: "react-dashboard",
-              score: 92,
-              lastReview: "1 day ago",
-              issues: 1,
+              score: 0,
+              lastReview: "Never",
+              issues: 0,
               security: 0,
-              performance: 88,
+              performance: 0,
             },
           ]);
         });
@@ -80,6 +106,88 @@ export default function Dashboard() {
   if (!session) {
     return null;
   }
+
+  const runCodeRating = async (fullName: string) => {
+    try {
+      setRateOpen(true);
+      setRateLoading(true);
+      setRateError(null);
+      setRateResult("");
+      setRateRepoLabel(fullName);
+
+      const [owner, repoName] = (fullName ?? "unknown/unknown").split("/");
+      console.log("[ui:rate] Requesting code rating", {
+        fullName,
+        owner,
+        repoName,
+      });
+      const res = await fetch("/api/claude/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, repo: repoName }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || "Failed to get code rating");
+      }
+
+      const data = await res.json();
+      console.log("[ui:rate] Received response", {
+        ok: res.ok,
+        resultLen: (data?.result || "").length,
+        preview: (data?.result || "").slice(0, 200),
+      });
+      setRateResult(data.result || "No content returned");
+    } catch (e: any) {
+      console.error("[ui:rate] Error", e);
+      setRateError(e?.message || "An error occurred while getting code rating");
+    } finally {
+      setRateLoading(false);
+    }
+  };
+
+  const runSystemDesign = async (fullName: string) => {
+    try {
+      setDesignOpen(true);
+      setDesignLoading(true);
+      setDesignError(null);
+      setDesignResult("");
+      setDesignRepoLabel(fullName);
+
+      const [owner, repoName] = (fullName ?? "unknown/unknown").split("/");
+      console.log("[ui:design] Requesting system design", {
+        fullName,
+        owner,
+        repoName,
+      });
+      const res = await fetch("/api/claude/design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, repo: repoName }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || "Failed to get system design analysis");
+      }
+
+      const data = await res.json();
+      console.log("[ui:design] Received response", {
+        ok: res.ok,
+        resultLen: (data?.result || "").length,
+        preview: (data?.result || "").slice(0, 200),
+      });
+      setDesignResult(data.result || "No content returned");
+    } catch (e: any) {
+      console.error("[ui:design] Error", e);
+      setDesignError(
+        e?.message || "An error occurred while getting system design analysis"
+      );
+    } finally {
+      setDesignLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen relative">
@@ -249,7 +357,7 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
+                {/* Action Button */}
                 <div className="flex gap-3">
                   <button
                     onClick={() => {
@@ -265,21 +373,6 @@ export default function Dashboard() {
                     }}
                   >
                     <span>Check Repo</span>
-                  </button>
-                  <button className="px-4 py-3 rounded-xl bg-white border-2 border-gray-200 text-gray-900 font-bold flex items-center justify-center transition-colors hover:border-indigo-500">
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                      />
-                    </svg>
                   </button>
                 </div>
               </div>
@@ -335,6 +428,96 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      {rateOpen && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl bg-white rounded-2xl border border-gray-200 shadow-xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="font-bold text-gray-900">Code Rating</div>
+              <button
+                onClick={() => {
+                  setRateOpen(false);
+                  setRateError(null);
+                  setRateResult("");
+                }}
+                className="text-gray-500 hover:text-gray-800"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-4 max-h-[70vh] overflow-auto">
+              <div className="text-sm text-gray-500 mb-3">{rateRepoLabel}</div>
+              {rateLoading && (
+                <div className="flex items-center gap-3 text-gray-700">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700"></div>
+                  Getting code rating from Claude...
+                </div>
+              )}
+              {!rateLoading && rateError && (
+                <div className="text-red-600 font-medium">{rateError}</div>
+              )}
+              {!rateLoading && !rateError && (
+                <pre className="whitespace-pre-wrap text-sm text-gray-800">
+                  {rateResult}
+                </pre>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setRateOpen(false)}
+                className="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {designOpen && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl bg-white rounded-2xl border border-gray-200 shadow-xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="font-bold text-gray-900">System Design</div>
+              <button
+                onClick={() => {
+                  setDesignOpen(false);
+                  setDesignError(null);
+                  setDesignResult("");
+                }}
+                className="text-gray-500 hover:text-gray-800"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-4 max-h-[70vh] overflow-auto">
+              <div className="text-sm text-gray-500 mb-3">
+                {designRepoLabel}
+              </div>
+              {designLoading && (
+                <div className="flex items-center gap-3 text-gray-700">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700"></div>
+                  Getting system design analysis from Claude...
+                </div>
+              )}
+              {!designLoading && designError && (
+                <div className="text-red-600 font-medium">{designError}</div>
+              )}
+              {!designLoading && !designError && (
+                <pre className="whitespace-pre-wrap text-sm text-gray-800">
+                  {designResult}
+                </pre>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setDesignOpen(false)}
+                className="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
