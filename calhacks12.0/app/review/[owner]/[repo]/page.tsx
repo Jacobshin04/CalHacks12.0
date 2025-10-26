@@ -157,273 +157,86 @@ export default function ReviewPage() {
     fetchData();
   }, [owner, repo, path]);
 
-  // Parse CodeRabbit comments for metrics
+  // Unified Claude analysis (readability, bugs, security, design)
   useEffect(() => {
-    if (!selectedPR) return;
+    if (!owner || !repo) return;
 
-    console.log("[ReviewPage] Starting Bugs analysis from CodeRabbit...");
-
-    const parseCodeRabbitComments = (comments: any[]) => {
-      const allComments = [...comments, ...selectedPR.reviewComments];
-      const allCommentTexts = allComments.map(
-        (c) => c.body?.toLowerCase() || ""
-      );
-      const combinedText = allCommentTexts.join(" ");
-
-      // Check for bugs/issues
-      const bugKeywords = [
-        "bug",
-        "error",
-        "issue",
-        "problem",
-        "defect",
-        "fail",
-        "exception",
-      ];
-      const bugs = bugKeywords.filter((keyword) =>
-        combinedText.includes(keyword)
-      ).length;
-
-      if (bugs > 0) {
-        console.log(
-          `[ReviewPage] ✅ Found ${bugs} bug(s) in CodeRabbit comments`
-        );
-        // Get full comments mentioning bugs
-        const bugComments = allComments.filter((c) =>
-          bugKeywords.some((keyword) => c.body?.toLowerCase().includes(keyword))
-        );
-
-        const bugsValue = `${bugs} ${bugs === 1 ? "issue" : "issues"} found`;
-        console.log(`[ReviewPage] Bugs assessment: ${bugsValue}`);
-        setBugsData({
-          value: bugsValue,
-          source: "CodeRabbit",
-          comments: bugComments.map((c) => c.body || ""),
-          loading: false,
-        });
-      } else {
-        console.log("[ReviewPage] ⚠️ No bugs found, marking as complete");
-        // No bugs found, mark as not loading
-        setBugsData((prev) =>
-          prev ? { ...prev, loading: false, value: "No issues" } : null
-        );
-      }
-    };
-
-    parseCodeRabbitComments(selectedPR.comments || []);
-  }, [selectedPR]);
-
-  // Fetch Readability from Claude API
-  useEffect(() => {
-    if (!selectedPR || !selectedPR.id) return;
-
-    console.log(
-      "[ReviewPage] 📖 Starting Readability analysis via Claude API..."
-    );
-
-    const fetchReadability = async () => {
+    const run = async () => {
       setReadabilityData((prev) => ({ ...prev, loading: true }));
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second to avoid rate limits
-
-        console.log(
-          "[ReviewPage] 📖 Calling Claude API for Code Quality/Readability analysis..."
-        );
-
-        const body = JSON.stringify({ owner, repo });
-        const response = await fetch("/api/claude/quality", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const content = data.result || "";
-
-          // Extract code quality score
-          const scoreMatch =
-            content.match(/Overall Code Quality Score\s*:?\s*(\d{1,3})/i) ||
-            content.match(/Score\s*:?\s*(\d{1,3})\s*\/\s*100/i);
-          const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
-
-          // Extract readable indicators
-          const positiveIndicators = content.match(
-            /clean|well-structured|maintainable|readable|clear|organized|good|excellent/i
-          );
-          const hasConcerns = content.match(
-            /complex|confusing|unclear|messy|disorganized|hard to read|poor/i
-          );
-
-          // Assessment based on score and content
-          let assessment = "Needs review";
-          if (score && score >= 80) {
-            assessment = "Excellent";
-          } else if (score && score >= 65) {
-            assessment = "Good";
-          } else if (score && score >= 50) {
-            assessment = "Fair";
-          } else if (hasConcerns || (score && score < 50)) {
-            assessment = "Needs improvement";
-          } else if (positiveIndicators && !hasConcerns) {
-            assessment = "Good";
-          } else if (positiveIndicators) {
-            assessment = "Mixed";
-          }
-
-          console.log(
-            `[ReviewPage] 📖 Readability analysis complete - Assessment: ${assessment}, Score: ${score}`
-          );
-          setReadabilityData({
-            value: assessment,
-            source: "Claude",
-            content, // Show full readability analysis
-            score,
-            loading: false,
-          });
-        } else {
-          console.error(
-            `[ReviewPage] 📖 Readability analysis failed with status: ${response.status}`
-          );
-          setReadabilityData((prev) => ({
-            ...prev,
-            loading: false,
-            value: "Unable to analyze",
-            source: "Error",
-          }));
-        }
-      } catch (error) {
-        console.error("[ReviewPage] 📖 Readability analysis error:", error);
-        setReadabilityData((prev) => ({
-          ...prev,
-          loading: false,
-          value: "Error",
-          source: "Error",
-        }));
-      }
-    };
-
-    fetchReadability();
-  }, [selectedPR, owner, repo]);
-
-  // Fetch Claude analysis for metrics not covered by CodeRabbit
-  useEffect(() => {
-    if (!selectedPR || !selectedPR.id) return;
-
-    console.log("[ReviewPage] Starting Security analysis via Claude API...");
-    console.log(
-      "[ReviewPage] Starting System Design analysis via Claude API..."
-    );
-
-    const fetchClaudeAnalysis = async () => {
-      // Helper function to delay
-      const delay = (ms: number) =>
-        new Promise((resolve) => setTimeout(resolve, ms));
-
-      // Fetch security analysis with delay to avoid rate limits
       setSecurityData((prev) => ({ ...prev, loading: true }));
-      try {
-        await delay(2000); // Wait 2 seconds before Security call
-        const body = JSON.stringify({ owner, repo });
-        console.log(
-          "[ReviewPage] 🔒 Calling /api/claude/rate for Security analysis..."
-        );
-        const response = await fetch("/api/claude/rate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const content = data.result || "";
-
-          // Extract score
-          const scoreMatch = content.match(/Score\s*:\s*(\d{1,3})\s*\/\s*100/i);
-          const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
-
-          // Count issues
-          const issueCount = (
-            content.match(/issue|vulnerability|risk|concern|problem/gi) || []
-          ).length;
-
-          console.log(
-            `[ReviewPage] 🔒 Security analysis complete - Score: ${score}, Issues: ${issueCount}`
-          );
-          setSecurityData({
-            content,
-            score,
-            loading: false,
-          });
-          setTotalIssues((prev) => ({ ...prev, security: issueCount }));
-        } else {
-          console.error(
-            `[ReviewPage] 🔒 Security analysis failed with status: ${response.status}`
-          );
-          setSecurityData((prev) => ({ ...prev, loading: false }));
-        }
-      } catch (error) {
-        console.error("[ReviewPage] 🔒 Security analysis error:", error);
-        setSecurityData((prev) => ({ ...prev, loading: false }));
-      }
-
-      // Fetch design analysis with delay to avoid rate limits
       setDesignData((prev) => ({ ...prev, loading: true }));
+      setBugsData((prev) => (prev ? { ...prev, loading: true } : prev));
       try {
-        await delay(2000); // Wait 2 seconds before Design call
-        const body = JSON.stringify({ owner, repo });
-        console.log(
-          "[ReviewPage] ⚡ Calling /api/claude/design for System Design analysis..."
-        );
-        const response = await fetch("/api/claude/design", {
+        const res = await fetch("/api/claude/check", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body,
+          body: JSON.stringify({ owner, repo }),
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          const content = data.result || "";
+        if (!res.ok) throw new Error(`check failed ${res.status}`);
+        const data = await res.json();
+        const r = data.result || {};
 
-          // Extract score
-          const scoreMatch = content.match(/Score\s*:\s*(\d{1,3})\s*\/\s*100/i);
-          const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
+        // Readability
+        const readScore: number | null =
+          typeof r.readability?.score === "number" ? r.readability.score : null; // 0-25
+        const readAssessment = r.readability?.assessment || "Needs review";
+        const readBullets: string[] = r.readability?.bullets || [];
+        setReadabilityData({
+          value: readAssessment,
+          source: "Claude",
+          content: readBullets.join("\n"),
+          score: readScore !== null ? readScore * 4 : null, // keep 0-100 for overall
+          loading: false,
+        });
 
-          // Count issues
-          const issueCount = (
-            content.match(
-              /issue|problem|concern|improvement|recommendation/gi
-            ) || []
-          ).length;
+        // Bugs
+        const bugScore: number =
+          typeof r.bugs?.score === "number" ? r.bugs.score : 0; // 0-25
+        const bugBullets: string[] = r.bugs?.bullets || [];
+        setBugsData({
+          value: `${bugScore}/25`,
+          source: "Claude",
+          comments: bugBullets,
+          loading: false,
+        });
 
-          console.log(
-            `[ReviewPage] ⚡ System Design analysis complete - Score: ${score}, Issues: ${issueCount}`
-          );
-          setDesignData({
-            content,
-            score,
-            loading: false,
-          });
-          setTotalIssues((prev) => ({ ...prev, design: issueCount }));
-        } else {
-          console.error(
-            `[ReviewPage] ⚡ System Design analysis failed with status: ${response.status}`
-          );
-          setDesignData((prev) => ({ ...prev, loading: false }));
-        }
-      } catch (error) {
-        console.error("[ReviewPage] ⚡ System Design analysis error:", error);
-        setDesignData((prev) => ({ ...prev, loading: false }));
-      }
+        // Security
+        const secScore: number | null =
+          typeof r.security?.score === "number" ? r.security.score : null; // 0-25
+        const secBullets: string[] = r.security?.bullets || [];
+        setSecurityData({
+          content: [secScore != null ? `Score: ${secScore}/25` : "Score: N/A", ...secBullets].join("\n"),
+          score: secScore !== null ? secScore * 4 : null, // maintain 0-100 compatibility
+          loading: false,
+        });
+        setTotalIssues((prev) => ({ ...prev, security: secBullets.length }));
 
-      // Complete review after analysis
-      setTimeout(() => {
+        // Design
+        const desScore: number | null =
+          typeof r.design?.score === "number" ? r.design.score : null; // 0-25
+        const desBullets: string[] = r.design?.bullets || [];
+        setDesignData({
+          content: [desScore != null ? `Score: ${desScore}/25` : "Score: N/A", ...desBullets].join("\n"),
+          score: desScore !== null ? desScore * 4 : null, // maintain 0-100 compatibility
+          loading: false,
+        });
+        setTotalIssues((prev) => ({ ...prev, design: desBullets.length }));
+
         setReviewStatus("complete");
-      }, 1000);
+      } catch (e) {
+        console.error("[ReviewPage] unified check error", e);
+        setReadabilityData((prev) => ({ ...prev, loading: false, value: "Error", source: "Error" }));
+        setSecurityData((prev) => ({ ...prev, loading: false }));
+        setDesignData((prev) => ({ ...prev, loading: false }));
+        setBugsData((prev) => (prev ? { ...prev, loading: false, value: "Error", source: "Error" } : prev));
+      }
     };
 
-    fetchClaudeAnalysis();
-  }, [selectedPR, owner, repo]);
+    run();
+  }, [owner, repo]);
+
+  
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -528,17 +341,35 @@ export default function ReviewPage() {
   const handleExportPostman = async () => {
     try {
       setPostmanLoading(true);
-      const response = await fetch("/api/postman/collection", {
+      // 1) Discover endpoints
+      const endpointsRes = await fetch("/api/analyze/endpoints", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ owner, repo }),
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to generate Postman collection");
+      if (!endpointsRes.ok) {
+        const err = await endpointsRes.json().catch(() => ({}));
+        throw new Error(err?.error || "Failed to discover endpoints");
       }
+      const endpointsData = await endpointsRes.json();
+      const endpoints = endpointsData?.endpoints || [];
 
-      const blob = await response.blob();
+      // 2) Generate Postman collection JSON
+      const pmRes = await fetch("/api/postman/collection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, repo, endpoints }),
+      });
+      if (!pmRes.ok) {
+        const err = await pmRes.json().catch(() => ({}));
+        throw new Error(err?.error || "Failed to generate Postman collection");
+      }
+      const collection = await pmRes.json();
+
+      // 3) Download JSON as file
+      const blob = new Blob([JSON.stringify(collection, null, 2)], {
+        type: "application/json",
+      });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
