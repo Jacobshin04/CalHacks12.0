@@ -44,11 +44,11 @@ export async function GET(request: NextRequest) {
       stars: repo.stargazers_count,
       forks: repo.forks_count,
       updatedAt: repo.updated_at,
-      score: Math.floor(Math.random() * 30) + 70, // Placeholder score (70-100)
+      score: 0, // Initial score set to 0 on login
       lastReview: "Never",
       issues: repo.open_issues_count,
       security: 0,
-      performance: Math.floor(Math.random() * 20) + 80,
+      performance: 0,
     }));
 
     return NextResponse.json({ repos: transformedRepos });
