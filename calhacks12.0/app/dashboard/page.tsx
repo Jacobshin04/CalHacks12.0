@@ -170,13 +170,12 @@ export default function Dashboard() {
                     )}
                   </div>
                   <div
-                    className={`px-3 py-1 rounded-full text-sm font-medium ml-2 ${
-                      repo.score >= 90
+                    className={`px-3 py-1 rounded-full text-sm font-medium ml-2 ${repo.score >= 90
                         ? "bg-green-100 text-green-800"
                         : repo.score >= 70
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
                   >
                     {repo.score}/100
                   </div>
@@ -225,15 +224,16 @@ export default function Dashboard() {
                     </span>
                   </div>
                 </div>
-
-                <a
-                  href={repo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => {
+                    const [owner, repoName] = (repo.fullName ?? `unknown/${repo.name}`).split("/");
+                    router.push(`/review/${owner}/${repoName}`);
+                  }}
                   className="block w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-center"
                 >
-                  View on GitHub
-                </a>
+                  Review
+                </button>
+
               </div>
             ))}
           </div>
