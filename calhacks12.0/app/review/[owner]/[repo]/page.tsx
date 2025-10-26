@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 
 interface PullRequest {
   id: number;
@@ -23,6 +23,7 @@ interface PullRequest {
 
 export default function ReviewPage() {
   const params = useParams<{ owner: string; repo: string }>();
+  const router = useRouter();
   const search = useSearchParams();
   const owner = params.owner;
   const repo = params.repo;
@@ -134,9 +135,17 @@ export default function ReviewPage() {
 
   return (
     <div className="min-h-screen p-8">
-      <h1 className="text-2xl font-bold mb-2">
-        Review: {owner}/{repo}
-      </h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold">
+          Review: {owner}/{repo}
+        </h1>
+        <button
+          onClick={() => router.push(`/review/${owner}/${repo}/analysis`)}
+          className="px-4 py-2 rounded-xl bg-white border-2 border-gray-200 text-gray-900 font-bold transition-colors hover:border-indigo-500"
+        >
+          Analysis
+        </button>
+      </div>
       <p className="text-gray-600 mb-6">Pull Request History and Comments</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
